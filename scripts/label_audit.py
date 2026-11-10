@@ -82,8 +82,9 @@ def main():
 
     cols = 4
     rows = int(np.ceil(args.n / cols))
-    fig, axes = plt.subplots(rows, 2 * cols + 1, figsize=(2 * cols * 1.5 + 0.4, rows * 1.6),
-                             gridspec_kw={"width_ratios": [1] * cols + [0.15] + [1] * cols})
+    fig, axes = plt.subplots(rows, 2 * cols + 1, figsize=(2 * cols * 1.4 + 0.3, rows * 1.4 + 0.5),
+                             gridspec_kw={"width_ratios": [1] * cols + [0.15] + [1] * cols,
+                                          "wspace": 0.05, "hspace": 0.08})
     for ax in axes.ravel():
         ax.axis("off")
     for k, p in enumerate(left):
@@ -96,7 +97,6 @@ def main():
                                 fontweight="bold", color=CHARCOAL)
     out = ROOT / "figures" / "label_audit.png"
     out.parent.mkdir(exist_ok=True)
-    fig.tight_layout()
     fig.savefig(out, dpi=DPI, bbox_inches="tight")
     print(f"saved {out}")
 

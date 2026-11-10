@@ -18,3 +18,4 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 .streamlit/secrets.toml
+app/static/

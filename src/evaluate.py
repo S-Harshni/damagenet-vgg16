@@ -113,12 +113,13 @@ def write_summary(cfg: dict, paths: Paths, timings: dict | None = None) -> str:
          "Road-damage patch classification on RDD2022 (4 classes, class-balanced test set of "
          f"{len(R['vgg16_ft']['predictions']['y_true'])} patches).", "",
          "## Main results", "",
-         "| Model | Test accuracy | Macro precision | Macro recall | Macro F1 | Epochs (best) |",
-         "|---|---|---|---|---|---|"]
+         "| Model | Test accuracy | Macro precision | Macro recall | Macro F1 | Val acc (best epoch) | Epochs run (best) |",
+         "|---|---|---|---|---|---|---|"]
     for k, label in MODEL_LABELS.items():
         r = R[k]
         L.append(f"| {label} | {r['test_accuracy']:.4f} | {r['macro_precision']:.4f} | "
-                 f"{r['macro_recall']:.4f} | {r['macro_f1']:.4f} | {r['epochs_run']} ({r['best_epoch']}) |")
+                 f"{r['macro_recall']:.4f} | {r['macro_f1']:.4f} | {r['history']['val_acc'][r['best_epoch'] - 1]:.4f} | "
+                 f"{r['epochs_run']} ({r['best_epoch']}) |")
     L += ["", "## Regularisation ablation (stage 1 head, cumulative)", "",
           "| Run | Added | Test accuracy | Macro F1 | Final train acc | Final val acc |", "|---|---|---|---|---|---|"]
     added = {"A0": "none", "A1": "+ dropout 0.5", "A2": "+ L2 1e-3", "A3": "+ horizontal-flip copies",
@@ -148,7 +149,9 @@ def write_summary(cfg: dict, paths: Paths, timings: dict | None = None) -> str:
               str(len(v) // len(classes)) for v in load_json(paths.patches / "meta.json").values()),
           ""]
     if timings:
-        L += ["## Runtime", ""] + [f"- {k}: {v / 60:.1f} min" for k, v in timings.items()] + [""]
+        L += ["## Runtime", "", "Pipeline steps (image downloads were already cached; a first run adds the "
+              "rate-limited download time, ~45 min anonymous):", ""]
+        L += [f"- {k}: {v / 60:.1f} min" for k, v in timings.items()] + [""]
     text = "\n".join(L)
     (paths.results / "summary.md").write_text(text, encoding="utf-8")
     return text
@@ -162,7 +165,9 @@ def main(argv=None):
     paths = get_paths(cfg, args.debug).make()
     setup_logging(paths.logs, "evaluate")
     analyse(cfg, paths)
-    print(write_summary(cfg, paths))
+    info = paths.results / "run_info.json"
+    timings = load_json(info)["timings_seconds"] if info.exists() else None
+    print(write_summary(cfg, paths, timings))
 
 
 if __name__ == "__main__":

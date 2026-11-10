@@ -1,0 +1,15 @@
+{
+  "timings_seconds": {
+    "1. download + parse annotations": 4.9,
+    "2. build patch dataset": 37.2,
+    "3. baseline CNN": 113.5,
+    "4. VGG16 feature caching": 63.1,
+    "5. VGG16 stage 1 + ablation": 46.6,
+    "6. VGG16 stage 2 fine-tuning": 53.9,
+    "7. analysis": 0.0,
+    "8. figures": 2.7,
+    "total": 321.9
+  },
+  "device": "mps",
+  "debug": false
+}

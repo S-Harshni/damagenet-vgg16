@@ -1,0 +1,98 @@
+{
+  "run": "vgg16_ft",
+  "n_test": 1200,
+  "n_errors": 340,
+  "accuracy_by_country": {
+    "China_Drone": {
+      "n": 49,
+      "accuracy": 0.8163
+    },
+    "China_MotorBike": {
+      "n": 86,
+      "accuracy": 0.6977
+    },
+    "Czech": {
+      "n": 29,
+      "accuracy": 0.7586
+    },
+    "India": {
+      "n": 239,
+      "accuracy": 0.7741
+    },
+    "Japan": {
+      "n": 422,
+      "accuracy": 0.6991
+    },
+    "Norway": {
+      "n": 172,
+      "accuracy": 0.686
+    },
+    "United_States": {
+      "n": 203,
+      "accuracy": 0.6897
+    }
+  },
+  "accuracy_by_box_size": {
+    "small": {
+      "n": 400,
+      "accuracy": 0.78,
+      "max_side_range_px": [
+        31.0,
+        104.0
+      ]
+    },
+    "medium": {
+      "n": 401,
+      "accuracy": 0.6509,
+      "max_side_range_px": [
+        105.0,
+        218.0
+      ]
+    },
+    "large": {
+      "n": 399,
+      "accuracy": 0.7193,
+      "max_side_range_px": [
+        219.0,
+        2145.3
+      ]
+    }
+  },
+  "box_size_thirds_px": [
+    104.7,
+    218.0
+  ],
+  "top_confusions": [
+    {
+      "true": "D10",
+      "pred": "D00",
+      "count": 53
+    },
+    {
+      "true": "D10",
+      "pred": "D20",
+      "count": 46
+    },
+    {
+      "true": "D20",
+      "pred": "D00",
+      "count": 41
+    },
+    {
+      "true": "D00",
+      "pred": "D20",
+      "count": 36
+    },
+    {
+      "true": "D20",
+      "pred": "D10",
+      "count": 35
+    },
+    {
+      "true": "D00",
+      "pred": "D10",
+      "count": 31
+    }
+  ],
+  "crack_confusion_share": 0.7118
+}

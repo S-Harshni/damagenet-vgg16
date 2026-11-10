@@ -165,7 +165,7 @@ def confusion(cfg, paths, run="vgg16_ft"):
         for j in range(len(classes)):
             ax.text(j, i, f"{cm[i, j]}\n{pct[i, j]:.0%}", ha="center", va="center", fontsize=9,
                     color="white" if pct[i, j] > 0.6 else CHARCOAL)
-    names = [f"{c}\n{n}" for c, n in zip(classes, cfg["dataset"]["class_names"])]
+    names = [f"{c}\n" + n.replace(" ", "\n") for c, n in zip(classes, cfg["dataset"]["class_names"])]
     ax.set_xticks(range(len(classes)), names, fontsize=8)
     ax.set_yticks(range(len(classes)), names, fontsize=8)
     ax.set_xlabel("Predicted")
@@ -187,7 +187,7 @@ def misclassified(cfg, paths, run="vgg16_ft", n=24):
     classes = cfg["dataset"]["classes"]
     cols = 6
     rows = max(1, int(np.ceil(len(pick) / cols)))
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 1.75, rows * 2.0), squeeze=False)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 1.75, rows * 2.25), squeeze=False)
     for ax in axes.ravel():
         ax.axis("off")
     for ax, i in zip(axes.ravel(), pick):

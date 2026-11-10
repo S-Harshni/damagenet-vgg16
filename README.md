@@ -13,7 +13,34 @@ University case study for *21CSC406J Neural Networks & Deep Learning*, SRM Insti
 | D40 | pothole | 3 |
 
 <!-- RESULTS:START -->
-_Results appear here after the full run (see `results/summary.md`)._
+## Results
+
+Balanced test set of 1,200 patches (300 per class), image-level split, seed 42.
+
+| Model | Test accuracy | Macro F1 | Val accuracy |
+|---|---|---|---|
+| Baseline CNN (scratch, 64×64) | **0.689** | 0.683 | 0.671 |
+| VGG16 frozen (feature extraction, A4) | **0.700** | 0.699 | 0.739 |
+| VGG16 fine-tuned (block 5) | **0.717** | 0.715 | 0.746 |
+
+- Pothole (D40) is the easiest class (F1 0.84). **71% of the fine-tuned model's errors are
+  confusions between crack types** (D00/D10/D20).
+- Each added regulariser helps a little: A0 0.688 → A3 0.708 test accuracy. Early stopping (A4)
+  closes the train/val gap (train 1.00 → 0.92) at about the same accuracy.
+- VGG16 test accuracy is about 4 points below its validation accuracy and below our expected
+  ballpark (74%/76%). Validation matches the ballpark, so this looks like split variance, not a
+  bug. The assembled checkpoint reproduces the cached-feature result exactly on raw test patches.
+- Full details: [`results/summary.md`](results/summary.md). Error analysis by country and box size:
+  [`results/analysis.json`](results/analysis.json).
+
+| | |
+|---|---|
+| ![Model comparison](figures/model_comparison.png) | ![Confusion matrix](figures/confusion_matrix.png) |
+| ![Ablation](figures/ablation.png) | ![Learning curves](figures/learning_curves.png) |
+
+![Label distribution](figures/label_distribution.png)
+![Sample patches](figures/sample_patches.png)
+![Misclassified examples](figures/misclassified.png)
 <!-- RESULTS:END -->
 
 ## Overview
@@ -48,7 +75,9 @@ original codes D43 (crosswalk blur), D44 (white-line blur) and D50 (manhole cove
 its "potholes" are manholes, lane markings and crosswalks. We use the original Pascal-VOC files
 from [`FelipeS09/urmind-rdd2022`](https://huggingface.co/datasets/FelipeS09/urmind-rdd2022)
 instead. `scripts/label_audit.py` puts mirror "potholes" next to clean D40 patches
-(`figures/label_audit.png`).
+(below).
+
+![Label audit](figures/label_audit.png)
 
 We also ignore that repository's own split lists' *split*: they split by country, so we only
 use them to get file names and make our own image-level random split.
@@ -137,8 +166,13 @@ figures/                 PNG figures
 
 Rough targets on the balanced 1,200-patch test set: scratch CNN ≈ 67% accuracy, VGG16 frozen
 ≈ 74%, VGG16 fine-tuned ≈ 76%. Pothole is the easiest class (F1 ≈ 0.88), and about 75% of
-errors are confusions between crack types. The actual numbers from our run are in the table at
-the top and in [`results/summary.md`](results/summary.md).
+errors are confusions between crack types. Our run gives 68.9% / 70.0% / 71.7% (validation 67.1% / 73.9% /
+74.6%), pothole F1 0.84 and a 71% crack-confusion share. The ordering and error structure match;
+see the Results section above.
+
+**Runtime.** The training and evaluation steps take about 6 min on an Apple M-series GPU (MPS)
+and roughly 20–40 min on a laptop CPU. A first run adds the image downloads (about 45 min
+anonymous, much faster with `HF_TOKEN`).
 
 ## Dataset credit
 
