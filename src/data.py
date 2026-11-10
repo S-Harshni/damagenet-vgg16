@@ -94,12 +94,46 @@ def download_files(repo_id: str, repo_paths: list[str], raw_dir: Path, workers: 
     return failed
 
 
+def fetch_xmls_git(repo_id: str, raw_dir: Path) -> int:
+    """Fast path for the ~35k small annotation files.
+
+    The XMLs are plain git blobs (only the images are LFS/xet), and fetching 35k files one
+    by one through the Hub's resolve endpoint is throttled for anonymous users (~1k files per
+    5 min, i.e. hours). A blobless *sparse* git clone that checks out only the xmls/ folders
+    gets them all in one pack in ~10 s. Files are moved into the same layout that
+    hf_hub_download uses, so both paths share one cache. Returns the number of files added.
+    """
+    import shutil
+    import subprocess
+
+    tmp = raw_dir / "_git_xml"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    env = {**__import__("os").environ, "GIT_LFS_SKIP_SMUDGE": "1"}
+    url = f"https://huggingface.co/datasets/{repo_id}"
+    run = lambda *a, cwd=None: subprocess.run(a, cwd=cwd, env=env, check=True, capture_output=True)
+    run("git", "clone", "-q", "--filter=blob:none", "--no-checkout", "--sparse", url, str(tmp))
+    run("git", "sparse-checkout", "set", "--no-cone", f"/{DATA_PREFIX}/*/train/annotations/xmls/*.xml", cwd=tmp)
+    run("git", "checkout", "-q", "HEAD", cwd=tmp)
+    added = 0
+    for src in (tmp / DATA_PREFIX).glob("*/train/annotations/xmls/*.xml"):
+        dst = raw_dir / src.relative_to(tmp)
+        if not dst.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), dst)
+            added += 1
+    shutil.rmtree(tmp, ignore_errors=True)
+    return added
+
+
 def fetch_split_lists(cfg: dict, paths: Paths) -> list[str]:
     """Download the three split lists and return the de-duplicated, sorted image ids."""
     ids: list[str] = []
     for s in cfg["dataset"]["split_lists"]:
         rp = f"splits/rdd2022_subset_{s}.txt"
-        local = Path(hf_hub_download(cfg["dataset"]["repo_id"], rp, repo_type="dataset",
+        local = paths.raw / rp
+        if not local.exists():
+            local = Path(hf_hub_download(cfg["dataset"]["repo_id"], rp, repo_type="dataset",
                                      local_dir=str(paths.raw)))
         ids += read_split_list(local)
     return sorted(set(ids))
@@ -151,7 +185,16 @@ def build_annotations(cfg: dict, paths: Paths, debug: bool = False) -> list[dict
         ids = sorted(rng.sample(pool, min(cfg["debug"]["max_images"], len(pool))))
         log.info(f"debug: using a random subset of {len(ids)} images")
 
-    failed = download_files(cfg["dataset"]["repo_id"], [xml_repo_path(i) for i in ids], paths.raw,
+    xml_paths = [xml_repo_path(i) for i in ids]
+    missing = sum(not (paths.raw / p).exists() for p in xml_paths)
+    if missing and cfg["dataset"].get("xml_download", "git") == "git":
+        try:
+            log.info(f"{missing} annotation files missing -> sparse git fetch of the xmls/ folders")
+            log.info(f"git fetch added {fetch_xmls_git(cfg['dataset']['repo_id'], paths.raw)} files")
+        except Exception as e:  # no git / network issue -> fall back to hf_hub_download
+            log.warning(f"git fetch failed ({e}); falling back to hf_hub_download")
+    # hf_hub_download (parallel, resumable) for anything still missing
+    failed = download_files(cfg["dataset"]["repo_id"], xml_paths, paths.raw,
                             cfg["dataset"]["download_workers"], desc="xml")
     if failed:
         log.warning(f"{len(failed)} annotation files could not be downloaded")

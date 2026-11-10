@@ -12,6 +12,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402,F401
 import numpy as np  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
@@ -51,11 +52,12 @@ def label_distribution(cfg, paths):
     classes, names = cfg["dataset"]["classes"], cfg["dataset"]["class_names"]
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.2), gridspec_kw={"width_ratios": [1, 1.6]})
     vals = [stats["overall"][c] for c in classes]
-    bars = a1.bar([f"{c}\n{n}" for c, n in zip(classes, names)], vals, color=CLASS_COLORS,
+    bars = a1.bar([f"{c}\n" + n.replace(" ", "\n") for c, n in zip(classes, names)], vals, color=CLASS_COLORS,
                   edgecolor=CHARCOAL, linewidth=0.6, width=0.65)
     _bar_labels(a1, bars, "{:,.0f}")
     a1.set_title(f"Boxes per class ({stats['n_images']:,} images)")
     a1.set_ylabel("Number of boxes")
+    a1.margins(y=0.1)
     a1.grid(axis="x", visible=False)
 
     countries = list(stats["per_country"])
@@ -69,7 +71,7 @@ def label_distribution(cfg, paths):
         a2.annotate(f"{int(t):,}", (t, i), xytext=(3, 0), textcoords="offset points", va="center", fontsize=8)
     a2.set_title("Boxes per country and class")
     a2.set_xlabel("Number of boxes")
-    a2.legend(ncol=4, loc="lower right")
+    a2.legend(ncol=4, loc="lower center", bbox_to_anchor=(0.5, -0.32))
     a2.grid(axis="y", visible=False)
     a2.invert_yaxis()
     _save(fig, paths, "label_distribution.png")
@@ -107,7 +109,9 @@ def learning_curves(cfg, paths):
                 ax.axvline(r["best_epoch"], color=col, lw=1, ls=":", alpha=0.8)
         ax.set_title(f"{title}: A0 vs A4 (VGG16 stage 1)")
         ax.set_xlabel("Epoch")
-    axes[1].legend(fontsize=7.5, loc="upper left")
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=8, bbox_to_anchor=(0.5, -0.08))
     _save(fig, paths, "learning_curves.png")
 
 

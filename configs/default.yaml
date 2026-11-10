@@ -15,6 +15,7 @@ dataset:
   classes: [D00, D10, D20, D40]
   class_names: [longitudinal crack, transverse crack, alligator crack, pothole]
   download_workers: 16
+  xml_download: git      # git = one sparse git fetch for the 35k XMLs (fast), hf = hf_hub_download only
 
 split:                   # image-level random split (seeded)
   train: 0.70
