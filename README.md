@@ -170,9 +170,14 @@ errors are confusions between crack types. Our run gives 68.9% / 70.0% / 71.7% (
 74.6%), pothole F1 0.84 and a 71% crack-confusion share. The ordering and error structure match;
 see the Results section above.
 
-**Runtime.** The training and evaluation steps take about 6 min on an Apple M-series GPU (MPS)
-and roughly 20–40 min on a laptop CPU. A first run adds the image downloads (about 45 min
-anonymous, much faster with `HF_TOKEN`).
+**Runtime (measured).** Patches + training + evaluation take 5.4 min on an Apple M-series GPU
+(MPS) and 16.5 min CPU-only on the same laptop (10-core Apple M-series). A first run adds the
+image downloads (about 45 min anonymous, much faster with `HF_TOKEN`).
+
+**Reproducibility.** Seeds are fixed, and repeated runs on the same device give identical numbers.
+Different devices (CPU / MPS / CUDA) use different floating-point kernels, so results can move by
+a point or two. Our CPU-only run gave baseline 66.3%, VGG16 frozen 70.7%, fine-tuned 71.9%, against
+68.9% / 70.0% / 71.7% for the published MPS run.
 
 ## Dataset credit
 
