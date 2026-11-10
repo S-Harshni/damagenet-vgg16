@@ -1,0 +1,79 @@
+# DamageNet-VGG16 — every hyperparameter used by the pipeline lives here.
+seed: 42
+device: auto            # auto | cpu | cuda | mps
+
+paths:
+  raw_dir: data/raw     # Hugging Face download cache (shared by debug + full runs)
+  data_dir: data        # ann.json, stats.json, splits.json, patches/, cache/
+  results_dir: results
+  figures_dir: figures
+  checkpoints_dir: checkpoints
+
+dataset:
+  repo_id: FelipeS09/urmind-rdd2022          # original Pascal-VOC annotations
+  split_lists: [train, validation, test]     # used ONLY to collect file names
+  classes: [D00, D10, D20, D40]
+  class_names: [longitudinal crack, transverse crack, alligator crack, pothole]
+  download_workers: 16
+
+split:                   # image-level random split (seeded)
+  train: 0.70
+  val: 0.15
+  test: 0.15
+
+patches:
+  size: 128              # output patch side (px)
+  context: 1.15          # square side = context * max(box_w, box_h)
+  min_side: 16           # skip boxes whose shorter side < 16 px
+  min_area: 900          # skip boxes with area < 900 px^2
+  per_class: {train: 900, val: 200, test: 300}
+  max_per_class_per_image: 2
+
+baseline:                # small CNN trained from scratch
+  input_size: 64
+  channels: [32, 64, 128, 128]
+  fc: 128
+  dropout: 0.5
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 64
+  max_epochs: 40
+  patience: 6
+  hflip: true
+
+vgg:
+  weights: IMAGENET1K_V1
+  input_size: 128
+  frozen_layers: 24      # features[:24] = blocks 1-4, always frozen and cached
+  block5: [24, 31]       # features[24:31]
+  hidden: 256
+  feature_batch_size: 64
+
+stage1:                  # feature extraction (block 5 frozen), head only
+  lr: 1.0e-4
+  batch_size: 64
+  epochs: 30
+  dropout: 0.5
+  l2: 1.0e-3             # Keras-style L2 penalty on the head's Dense kernels
+  patience: 5
+  # Cumulative regularisation ablation; A4 is the final stage-1 model.
+  ablation:
+    A0: {dropout: false, l2: false, flip: false, early_stopping: false}
+    A1: {dropout: true,  l2: false, flip: false, early_stopping: false}
+    A2: {dropout: true,  l2: true,  flip: false, early_stopping: false}
+    A3: {dropout: true,  l2: true,  flip: true,  early_stopping: false}
+    A4: {dropout: true,  l2: true,  flip: true,  early_stopping: true}
+
+stage2:                  # fine-tuning block 5 + head, starting from the A4 head
+  lr_block5: 1.0e-5
+  lr_head: 1.0e-4
+  weight_decay: 1.0e-3
+  batch_size: 64
+  max_epochs: 8
+  patience: 3
+  flip: true
+
+debug:                   # used with --debug
+  max_images: 1500       # random subset of annotation files to download/parse
+  per_class: 20          # patches per class per split
+  epochs: 2
