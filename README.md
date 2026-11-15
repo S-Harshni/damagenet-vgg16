@@ -129,27 +129,78 @@ pytest -q
 
 ### Pre-trained model and demo app
 
-The fine-tuned model is attached to the
-[v1.0 release](https://github.com/S-Harshni/damagenet-vgg16/releases/tag/v1.0) (not committed to git):
+The fine-tuned VGG16 is attached to the
+[v1.0 release](https://github.com/S-Harshni/damagenet-vgg16/releases/tag/v1.0) and the damage
+detector to the [v1.1 release](https://github.com/S-Harshni/damagenet-vgg16/releases/tag/v1.1)
+(not committed to git):
 
 ```bash
 mkdir -p checkpoints
 curl -L -o checkpoints/vgg16_ft.pt https://github.com/S-Harshni/damagenet-vgg16/releases/download/v1.0/vgg16_ft.pt
-# or: gh release download v1.0 -R S-Harshni/damagenet-vgg16 -D checkpoints
+curl -L -o checkpoints/detector.pt https://github.com/S-Harshni/damagenet-vgg16/releases/download/v1.1/detector.pt
 streamlit run app/streamlit_app.py
 ```
 
-Three input modes:
+Input modes:
 
-- **Road video** (mp4/mov/avi/mkv/webm): the app samples one frame every 0.25–2 s, you scrub to
-  a frame and drag a box around the damage. *Classify this box in every frame* runs the same
-  box over all sampled frames and shows a per-frame timeline table.
-- **Road photo + box**: upload a photo and drag a box around the damage.
-- **Ready-cut patch**: upload an already-cropped patch.
+- **Road video** (mp4/mov/avi/mkv/webm, first 2 minutes): click *Find damage*. The detector
+  finds damage automatically and the app returns the video with a box, class and confidence
+  score drawn on every frame (downloadable as mp4). Each damage is tracked across frames and
+  counted once (counts are approximate: a damage that leaves and re-enters the view, or that the
+  detector misses for several frames, gets a new ID). A table lists every tracked damage (best
+  score, first/last seen, VGG16 re-check) with a gallery of its best view. Controls: minimum
+  confidence (default 0.40), damage types to show, *Flip check* (TTA, on by default) and how
+  often the detector runs (every 1st–5th frame; boxes are drawn on all frames). About 12–25 s
+  per 15 s of 720p video on Apple MPS.
+- **Road photo**: the same automatic boxes on a photo, plus an option to drag your own box
+  and classify it with VGG16.
+- **Ready-cut patch**: classify an already-cropped patch with VGG16.
 
-The app shows the predicted class and the probabilities. The model is a patch classifier, not
-a detector: it has no "no damage" class, so it always picks one of the 4 damage types and
-needs the box to know where to look. `notebooks/demo.ipynb` walks through the
+## Automatic damage detection (video mode)
+
+VGG16 is a patch classifier: it needs a box and has no "no damage" class, so it cannot find
+damage by itself. For the video mode we add a detector, `src/detect.py`: **Faster R-CNN with a
+MobileNetV3-Large FPN backbone** (torchvision, COCO-pretrained) fine-tuned on the RDD2022 boxes
+(D00/D10/D20/D40) of the **same seeded image-level split**, so the test images are unseen by both
+models. Horizontal flips only, as for the classifier.
+
+```bash
+python -m src.detect                               # download images, train (~2.3 h on Apple MPS), evaluate on test
+python -m src.detect --only eval --split val --tta # evaluate with flip test-time augmentation
+python -m src.figures --detector                   # detector figures
+```
+
+**Results on the held-out test images** (1,254 images, VOC AP at IoU 0.5; F1 is the RDD
+challenge metric):
+
+| Detector | Train images | mAP@0.5 | D00 | D10 | D20 | D40 pothole | F1 @ 0.40 |
+|---|---|---|---|---|---|---|---|
+| Baseline: 512 px, 6 epochs | 4,815 | 0.303 | 0.233 | 0.221 | 0.503 | 0.253 | 0.36 |
+| Improved: + 10k images, multi-scale 448–576 px, 5 epochs | 14,815 | 0.345 | 0.288 | 0.300 | 0.541 | 0.251 | 0.40 |
+| **Improved + horizontal-flip TTA (final, used by the app)** | 14,815 | **0.355** | **0.302** | **0.302** | **0.556** | **0.261** | **0.40** |
+
+How the final model was chosen (no tuning on the test set):
+
+- Training images: every image used by the patch dataset, every image with a pothole, plus
+  (improved run) 10,000 further random *training* images. Validation and test images are
+  identical for both runs.
+- The checkpoint is the epoch with the best **validation** mAP (epoch 4 of 5). Flip TTA was
+  kept because it raised validation mAP from 0.366 to 0.377 and validation pothole AP from 0.250
+  to 0.265. The app's default confidence threshold (0.40) is the one with the best validation F1.
+- Tried and dropped: fine-tuning the whole MobileNetV3 backbone. It was about 2× slower per step
+  (5 epochs would have taken ~6 h) and did not fit the time budget.
+- More data helped every crack class (+6 to +8 AP points); pothole AP stayed about the same
+  (0.25–0.26). RDD2022 pothole boxes are inconsistent: some outline one hole, others a whole
+  stretch of broken road, so there is a ceiling on how well any model can match them.
+
+![Detector comparison](figures/detector_comparison.png)
+![Detector training](figures/detector_training.png)
+![Detector examples](figures/detector_examples.png)
+
+`src/video.py` runs the detector on the video frames, links detections across frames with a
+greedy IoU tracker (one ID per damage), draws the boxes on every frame and re-encodes an H.264
+mp4 in memory. The fine-tuned VGG16 re-classifies the best view of each tracked damage
+("VGG16 check" column) as a second opinion. `notebooks/demo.ipynb` walks through the
 saved results and figures.
 
 ## Repository layout
@@ -160,13 +211,15 @@ src/data.py              download + parse Pascal-VOC XMLs -> data/ann.json, data
 src/patches.py           image-level split, square crops, balanced sampling -> data/patches/*.npz
 src/models.py            baseline CNN, VGG16 head, full VGG16 classifier
 src/features.py          cached VGG16 block-4 / block-5 features
+src/detect.py            Faster R-CNN damage detector (train + VOC AP evaluation)
+src/video.py             video frames, IoU tracker, boxes drawn on video
 src/train.py             baseline, stage 1 + ablation, stage 2 fine-tuning
 src/evaluate.py          metrics, error analysis, results/summary.md
 src/figures.py           all figures (200 dpi) -> figures/
 src/run_all.py           one-command pipeline
 scripts/run_all.sh       shell wrapper     scripts/label_audit.py   mirror label audit
 app/streamlit_app.py     demo app          notebooks/demo.ipynb     results walkthrough
-tests/                   pytest: XML parsing, square cropping, split leakage
+tests/                   pytest: XML parsing, cropping, split leakage, detector + video
 results/                 *.json per run, analysis.json, summary.md
 figures/                 PNG figures
 ```

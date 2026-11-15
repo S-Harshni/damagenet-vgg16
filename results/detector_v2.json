@@ -1,0 +1,122 @@
+{
+  "name": "detector_v2",
+  "arch": "fasterrcnn_mobilenet_v3_large_fpn",
+  "split": "test (image-level, seed 42)",
+  "f1_at_0.5": {
+    "score": 0.5,
+    "precision": 0.602,
+    "recall": 0.27,
+    "f1": 0.3728
+  },
+  "best_f1": {
+    "score": 0.35,
+    "precision": 0.4758,
+    "recall": 0.3504,
+    "f1": 0.4036
+  },
+  "mAP50": 0.3448,
+  "AP50": {
+    "D00": 0.288,
+    "D10": 0.2997,
+    "D20": 0.5406,
+    "D40": 0.2511
+  },
+  "n_images": 1254,
+  "n_boxes": {
+    "D00": 1352,
+    "D10": 773,
+    "D20": 723,
+    "D40": 933
+  },
+  "min_size": [
+    448,
+    480,
+    512,
+    544,
+    576
+  ],
+  "best_epoch": 4,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.2915,
+      "val_mAP50": 0.2467,
+      "val_AP50": {
+        "D00": 0.2319,
+        "D10": 0.2155,
+        "D20": 0.405,
+        "D40": 0.1345
+      },
+      "seconds": 1708.4
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.2921,
+      "val_mAP50": 0.2831,
+      "val_AP50": {
+        "D00": 0.2751,
+        "D10": 0.209,
+        "D20": 0.4618,
+        "D40": 0.1864
+      },
+      "seconds": 1582.6
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.3049,
+      "val_mAP50": 0.332,
+      "val_AP50": {
+        "D00": 0.3059,
+        "D10": 0.2747,
+        "D20": 0.5301,
+        "D40": 0.2174
+      },
+      "seconds": 1544.2
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.307,
+      "val_mAP50": 0.357,
+      "val_AP50": {
+        "D00": 0.3172,
+        "D10": 0.312,
+        "D20": 0.5585,
+        "D40": 0.2401
+      },
+      "seconds": 1489.8
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.3076,
+      "val_mAP50": 0.3563,
+      "val_AP50": {
+        "D00": 0.3258,
+        "D10": 0.3023,
+        "D20": 0.5488,
+        "D40": 0.2484
+      },
+      "seconds": 1472.4
+    }
+  ],
+  "train_config": {
+    "all_pothole_images": true,
+    "batch_size": 8,
+    "epochs": 5,
+    "extra_train_images": 10000,
+    "lr": 0.01,
+    "max_size": 960,
+    "min_size": [
+      448,
+      480,
+      512,
+      544,
+      576
+    ],
+    "score_thresh": 0.5,
+    "trainable_backbone_layers": 3,
+    "weight_decay": 0.0001,
+    "workers": 4
+  },
+  "n_train_images": 14815,
+  "n_val_images": 998
+}

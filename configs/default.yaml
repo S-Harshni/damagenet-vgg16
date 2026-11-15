@@ -74,7 +74,22 @@ stage2:                  # fine-tuning block 5 + head, starting from the A4 head
   patience: 3
   flip: true
 
+detector:                # Faster R-CNN MobileNetV3-FPN that finds damage by itself (src/detect.py)
+  all_pothole_images: true   # add every D40 image of each split (not only the patch images)
+  extra_train_images: 10000  # + this many random further TRAIN images (val/test unchanged)
+  min_size: [448, 480, 512, 544, 576]  # multi-scale training (random per batch); eval uses the last
+  max_size: 960          # longer side cap (also the load-time downscale)
+  epochs: 5
+  trainable_backbone_layers: 3  # 0-6 MobileNetV3 stages fine-tuned (6 = all; ~2x slower per step, tried and dropped)
+  batch_size: 8
+  lr: 0.01               # SGD momentum 0.9, linear warm-up + cosine decay
+  weight_decay: 0.0001
+  workers: 4             # DataLoader worker processes
+  score_thresh: 0.4      # app default: the threshold with the best F1 on the VALIDATION set (v2 + TTA)
+  tta: true              # app: horizontal-flip test-time augmentation (+1 mAP point on val, 2x slower)
+
 debug:                   # used with --debug
   max_images: 1500       # random subset of annotation files to download/parse
   per_class: 20          # patches per class per split
   epochs: 2
+  det_images: 40         # detector images per split

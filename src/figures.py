@@ -198,6 +198,93 @@ def misclassified(cfg, paths, run="vgg16_ft", n=24):
     _save(fig, paths, "misclassified.png")
 
 
+# ------------------------------------------------------------------ detector figures
+DET_RUNS = [("detector_baseline", "Baseline (4.8k images)", LIGHT_GREY),
+            ("detector_v2", "Improved (14.8k images, multi-scale)", CHARCOAL),
+            ("detector_v2_test_tta", "Improved + flip TTA (final)", ORANGE)]
+
+
+def detector_comparison(cfg, paths):
+    classes, names = cfg["dataset"]["classes"], cfg["dataset"]["class_names"]
+    runs = [(load_json(paths.results / f"{k}.json"), lab, col) for k, lab, col in DET_RUNS
+            if (paths.results / f"{k}.json").exists()]
+    groups = [f"{c}\n" + n.replace(" ", "\n") for c, n in zip(classes, names)] + ["mAP@0.5\n(mean)"]
+    xs, w = np.arange(len(groups)), 0.8 / len(runs)
+    fig, ax = plt.subplots(figsize=(9, 4.4))
+    for k, (r, lab, col) in enumerate(runs):
+        vals = [r["AP50"][c] for c in classes] + [r["mAP50"]]
+        bars = ax.bar(xs + (k - (len(runs) - 1) / 2) * w, vals, w, color=col, edgecolor=CHARCOAL,
+                      linewidth=0.6, label=lab)
+        _bar_labels(ax, bars, "{:.2f}", fontsize=7.5)
+    ax.set_xticks(xs, groups, fontsize=8.5)
+    ax.set_ylabel("Average precision (IoU 0.5)")
+    ax.set_ylim(0, max(r["AP50"]["D20"] for r, _, _ in runs) + 0.12)
+    ax.set_title("Damage detector on the held-out test images (AP@0.5 per class)")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.grid(axis="x", visible=False)
+    _save(fig, paths, "detector_comparison.png")
+
+
+def detector_curves(cfg, paths):
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for k, lab, col in DET_RUNS[:2]:
+        f = paths.results / f"{k}_train.json"
+        if not f.exists():
+            continue
+        h = load_json(f)["history"]
+        ax.plot([e["epoch"] for e in h], [e["val_mAP50"] for e in h], "-o", color=GREY if col == LIGHT_GREY else col,
+                lw=2, ms=5, label=lab, markeredgecolor=CHARCOAL)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Validation mAP@0.5")
+    ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    ax.set_title("Detector training: validation mAP@0.5 per epoch")
+    ax.legend(loc="lower right", fontsize=8)
+    _save(fig, paths, "detector_training.png")
+
+
+def detector_examples(cfg, paths, n=6, thresh=0.4):
+    """Predicted boxes (left) next to the ground truth (right) on random test images with damage."""
+    import random
+
+    import torch
+    from PIL import Image
+
+    from .detect import detect, load_detector, load_image, select_records
+    from .utils import get_device
+    from .video import draw_detections
+    classes, names = cfg["dataset"]["classes"], cfg["dataset"]["class_names"]
+    dev = get_device(cfg["device"])
+    model, ck = load_detector(paths.checkpoints / "detector.pt", dev, score_thresh=0.05)
+    recs = [r for r in select_records(cfg, paths)["test"] if r["boxes"] and (paths.raw / r["file"]).exists()]
+    rng = random.Random(cfg["seed"])
+    pots = [r for r in recs if any(b["cls"] == "D40" for b in r["boxes"])]
+    pick = rng.sample(pots, n // 2) + rng.sample([r for r in recs if r not in pots], n - n // 2)
+    fig, axes = plt.subplots(n, 2, figsize=(8, n * 2.9))
+    for row, rec in enumerate(pick):
+        img, s = load_image(paths.raw / rec["file"], ck["max_size"])
+        x = torch.from_numpy(np.asarray(img, dtype=np.uint8).copy()).permute(2, 0, 1).float().div(255).to(dev)
+        o = detect(model, [x], tta=True)[0]
+        keep = o["scores"] >= thresh
+        pred = [{"box": b.tolist(), "label": int(lab) - 1, "score": float(sc)}
+                for b, lab, sc in zip(o["boxes"][keep].cpu(), o["labels"][keep].cpu(), o["scores"][keep].cpu())]
+        gt = [{"box": [v * s for v in b["box"]], "label": b["label"], "score": 1.0} for b in rec["boxes"]]
+        for col, dets, title in [(0, pred, f"Predicted (score ≥ {thresh})"), (1, gt, "Ground truth")]:
+            im = draw_detections(img.copy(), dets, classes, names)
+            axes[row, col].imshow(im)
+            axes[row, col].axis("off")
+            axes[row, col].set_title(f"{title} · {rec['id'].split('/')[1]}", fontsize=8)
+    fig.suptitle("Detector on held-out test images (final model + flip TTA)", fontweight="bold", y=1.0)
+    fig.tight_layout(rect=(0, 0, 1, 0.985))
+    fig.savefig(paths.figures / "detector_examples.png", dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    get_logger().info("figure saved: figures/detector_examples.png")
+
+
+def make_detector_figures(cfg, paths):
+    for fn in (detector_comparison, detector_curves, detector_examples):
+        fn(cfg, paths)
+
+
 def make_all(cfg, paths):
     for fn in (label_distribution, sample_patches, learning_curves, model_comparison, ablation,
                confusion, misclassified):
@@ -207,11 +294,12 @@ def make_all(cfg, paths):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--detector", action="store_true", help="make only the detector figures")
     args = ap.parse_args(argv)
     cfg = load_config()
     paths = get_paths(cfg, args.debug).make()
     setup_logging(paths.logs, "figures")
-    make_all(cfg, paths)
+    (make_detector_figures if args.detector else make_all)(cfg, paths)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """One-command pipeline: download -> parse -> patches -> train (baseline, VGG16 stage 1
 ablation, stage 2 fine-tuning) -> evaluate/analyse -> figures -> results/summary.md.
 
-    python -m src.run_all            # full run (~1 h on a laptop CPU, faster on GPU/MPS)
+    python -m src.run_all            # full run (~16 min on a laptop CPU, ~5 min on Apple MPS, + downloads)
     python -m src.run_all --debug    # tiny smoke test, outputs go to debug/
     python -m src.run_all --skip-data  # reuse data/ann.json and patches already built
 """

@@ -16,6 +16,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGGER_NAME = "damagenet"
+TORCH_HUB = ROOT / "data" / "torch_hub"  # pretrained weights are cached inside the project
+
+
+def use_project_torch_hub() -> None:
+    """Download torchvision pretrained weights into data/torch_hub (gitignored), not ~/.cache."""
+    torch.hub.set_dir(str(TORCH_HUB))
 
 
 def load_config(path: str | Path = ROOT / "configs" / "default.yaml") -> dict:

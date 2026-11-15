@@ -50,6 +50,8 @@ class VGGHead(nn.Module):
 
 def load_vgg16_features(pretrained: bool = True) -> nn.Sequential:
     """torchvision VGG16 convolutional part (31 layers: blocks 1-5)."""
+    from .utils import use_project_torch_hub
+    use_project_torch_hub()
     weights = VGG16_Weights.IMAGENET1K_V1 if pretrained else None
     return vgg16(weights=weights).features
 

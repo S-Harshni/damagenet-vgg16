@@ -1,0 +1,34 @@
+{
+  "name": "detector_baseline",
+  "arch": "fasterrcnn_mobilenet_v3_large_fpn",
+  "split": "val (image-level, seed 42)",
+  "tta": false,
+  "f1_at_0.5": {
+    "score": 0.5,
+    "precision": 0.6235,
+    "recall": 0.2425,
+    "f1": 0.3492
+  },
+  "best_f1": {
+    "score": 0.3,
+    "precision": 0.4367,
+    "recall": 0.3372,
+    "f1": 0.3806
+  },
+  "mAP50": 0.3176,
+  "AP50": {
+    "D00": 0.2579,
+    "D10": 0.2408,
+    "D20": 0.5208,
+    "D40": 0.2508
+  },
+  "n_images": 998,
+  "n_boxes": {
+    "D00": 913,
+    "D10": 524,
+    "D20": 600,
+    "D40": 878
+  },
+  "min_size": 512,
+  "best_epoch": 6
+}

@@ -1,0 +1,121 @@
+{
+  "name": "detector_baseline",
+  "arch": "fasterrcnn_mobilenet_v3_large_fpn",
+  "split": "test (image-level, seed 42)",
+  "f1_at_0.5": {
+    "score": 0.5,
+    "precision": 0.5762,
+    "recall": 0.2392,
+    "f1": 0.338
+  },
+  "best_f1": {
+    "score": 0.35,
+    "precision": 0.4503,
+    "recall": 0.2936,
+    "f1": 0.3555
+  },
+  "mAP50": 0.3025,
+  "AP50": {
+    "D00": 0.2332,
+    "D10": 0.2211,
+    "D20": 0.5025,
+    "D40": 0.2529
+  },
+  "n_images": 1254,
+  "n_boxes": {
+    "D00": 1344,
+    "D10": 767,
+    "D20": 723,
+    "D40": 929
+  },
+  "min_size": 512,
+  "best_epoch": 6,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.423,
+      "val_mAP50": 0.1663,
+      "val_AP50": {
+        "D00": 0.1531,
+        "D10": 0.072,
+        "D20": 0.3295,
+        "D40": 0.1108
+      },
+      "seconds": 663.0
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.379,
+      "val_mAP50": 0.246,
+      "val_AP50": {
+        "D00": 0.2194,
+        "D10": 0.1617,
+        "D20": 0.4086,
+        "D40": 0.1941
+      },
+      "seconds": 559.0
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.381,
+      "val_mAP50": 0.245,
+      "val_AP50": {
+        "D00": 0.2199,
+        "D10": 0.1835,
+        "D20": 0.3779,
+        "D40": 0.1987
+      },
+      "seconds": 556.0
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.384,
+      "val_mAP50": 0.2912,
+      "val_AP50": {
+        "D00": 0.2451,
+        "D10": 0.2199,
+        "D20": 0.4624,
+        "D40": 0.2374
+      },
+      "seconds": 546.0
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.38,
+      "val_mAP50": 0.3066,
+      "val_AP50": {
+        "D00": 0.2474,
+        "D10": 0.2306,
+        "D20": 0.5051,
+        "D40": 0.2433
+      },
+      "seconds": 510.0
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.377,
+      "val_mAP50": 0.3093,
+      "val_AP50": {
+        "D00": 0.2539,
+        "D10": 0.2342,
+        "D20": 0.5087,
+        "D40": 0.2402
+      },
+      "seconds": 494.0
+    }
+  ],
+  "train_config": {
+    "all_pothole_images": true,
+    "extra_train_images": 0,
+    "min_size": 512,
+    "max_size": 853,
+    "epochs": 6,
+    "batch_size": 8,
+    "lr": 0.01,
+    "weight_decay": 0.0001,
+    "trainable_backbone_layers": 3
+  },
+  "n_train_images": 4905,
+  "n_val_images": 1018,
+  "note": "baseline run; history recovered from its training log"
+}
