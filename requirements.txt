@@ -10,6 +10,7 @@ defusedxml>=0.7
 tqdm>=4.66
 streamlit>=1.35
 streamlit-cropper>=0.2.2
+av>=12            # video decoding for the demo app (bundles FFmpeg)
 pytest>=8.0
 nbformat>=5.9
 ipykernel>=6.29

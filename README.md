@@ -139,8 +139,17 @@ curl -L -o checkpoints/vgg16_ft.pt https://github.com/S-Harshni/damagenet-vgg16/
 streamlit run app/streamlit_app.py
 ```
 
-Upload a road photo and drag a box around the damage, or upload a ready-cut patch. The app
-shows the predicted class and the probabilities. `notebooks/demo.ipynb` walks through the
+Three input modes:
+
+- **Road video** (mp4/mov/avi/mkv/webm): the app samples one frame every 0.25–2 s, you scrub to
+  a frame and drag a box around the damage. *Classify this box in every frame* runs the same
+  box over all sampled frames and shows a per-frame timeline table.
+- **Road photo + box**: upload a photo and drag a box around the damage.
+- **Ready-cut patch**: upload an already-cropped patch.
+
+The app shows the predicted class and the probabilities. The model is a patch classifier, not
+a detector: it has no "no damage" class, so it always picks one of the 4 damage types and
+needs the box to know where to look. `notebooks/demo.ipynb` walks through the
 saved results and figures.
 
 ## Repository layout
