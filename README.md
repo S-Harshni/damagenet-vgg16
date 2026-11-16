@@ -143,18 +143,19 @@ streamlit run app/streamlit_app.py
 
 Input modes:
 
-- **Road video** (mp4/mov/avi/mkv/webm, first 2 minutes): click *Find damage*. The detector
-  finds damage automatically and the app returns the video with a box, class and confidence
-  score drawn on every frame (downloadable as mp4). Each damage is tracked across frames and
-  counted once (counts are approximate: a damage that leaves and re-enters the view, or that the
-  detector misses for several frames, gets a new ID). A table lists every tracked damage (best
-  score, first/last seen, VGG16 re-check) with a gallery of its best view. Controls: minimum
-  confidence (default 0.40), damage types to show, *Flip check* (TTA, on by default) and how
-  often the detector runs (every 1st–5th frame; boxes are drawn on all frames). About 12–25 s
-  per 15 s of 720p video on Apple MPS.
-- **Road photo**: the same automatic boxes on a photo, plus an option to drag your own box
+- **Video** (mp4/mov/avi/mkv/webm, first 2 minutes, or *Try a sample drive*): click *Find
+  damage*. The app returns the video with a steady box, class and confidence drawn on every
+  frame (downloadable as mp4), a count per damage type, a timeline of when each damage is on
+  screen, and a gallery of each damage's best view (click its time to jump there) plus a table
+  with a VGG16 re-check. Counts are approximate: a damage the detector loses for a while can get
+  a second ID. Sidebar settings: accuracy preset (*Fast* / *Balanced* / *Best*, default Best),
+  minimum confidence (default 0.50 for Best, 0.40 otherwise), damage types, how often the detector
+  runs (boxes are drawn on every frame either way) and *Steady boxes* (on; off shows the raw
+  detector output). About 3 min for a 1-minute 720p clip with *Best* on Apple MPS.
+  The theme is in `.streamlit/config.toml` (dark, Inter / Space Grotesk fonts).
+- **Photo**: the same automatic boxes on a photo, plus an option to drag your own box
   and classify it with VGG16.
-- **Ready-cut patch**: classify an already-cropped patch with VGG16.
+- **Patch**: classify an already-cropped patch with VGG16.
 
 ## Automatic damage detection (video mode)
 
@@ -167,6 +168,7 @@ models. Horizontal flips only, as for the classifier.
 ```bash
 python -m src.detect                               # download images, train (~2.3 h on Apple MPS), evaluate on test
 python -m src.detect --only eval --split val --tta # evaluate with flip test-time augmentation
+python -m src.detect --only eval --split val --tta --scales 576 704  # + a second input size ("Best")
 python -m src.figures --detector                   # detector figures
 ```
 
@@ -177,7 +179,8 @@ challenge metric):
 |---|---|---|---|---|---|---|---|
 | Baseline: 512 px, 6 epochs | 4,815 | 0.303 | 0.233 | 0.221 | 0.503 | 0.253 | 0.36 |
 | Improved: + 10k images, multi-scale 448–576 px, 5 epochs | 14,815 | 0.345 | 0.288 | 0.300 | 0.541 | 0.251 | 0.40 |
-| **Improved + horizontal-flip TTA (final, used by the app)** | 14,815 | **0.355** | **0.302** | **0.302** | **0.556** | **0.261** | **0.40** |
+| Improved + horizontal-flip TTA (app "Balanced") | 14,815 | 0.355 | 0.302 | 0.302 | 0.556 | 0.261 | 0.40 |
+| **Improved + flip TTA at 576 + 704 px (app "Best", default)** | 14,815 | **0.384** | **0.325** | **0.356** | **0.564** | **0.289** | **0.42** (@ 0.50) |
 
 How the final model was chosen (no tuning on the test set):
 
@@ -187,6 +190,11 @@ How the final model was chosen (no tuning on the test set):
 - The checkpoint is the epoch with the best **validation** mAP (epoch 4 of 5). Flip TTA was
   kept because it raised validation mAP from 0.366 to 0.377 and validation pothole AP from 0.250
   to 0.265. The app's default confidence threshold (0.40) is the one with the best validation F1.
+- Multi-scale TTA (same weights, no retraining): running the detector at 576 *and* 704 px and
+  merging raised validation mAP from 0.377 to 0.400 and best validation F1 from 0.422 to 0.439
+  (at score 0.50, so *Best* defaults to 0.50). Adding 832 px as well gave only 0.404 for 50% more
+  compute, so it was dropped. Merging overlapping boxes of different classes (used for display)
+  costs < 0.1 F1 point on validation.
 - Tried and dropped: fine-tuning the whole MobileNetV3 backbone. It was about 2× slower per step
   (5 epochs would have taken ~6 h) and did not fit the time budget.
 - More data helped every crack class (+6 to +8 AP points); pothole AP stayed about the same
@@ -197,9 +205,41 @@ How the final model was chosen (no tuning on the test set):
 ![Detector training](figures/detector_training.png)
 ![Detector examples](figures/detector_examples.png)
 
-`src/video.py` runs the detector on the video frames, links detections across frames with a
-greedy IoU tracker (one ID per damage), draws the boxes on every frame and re-encodes an H.264
-mp4 in memory. The fine-tuned VGG16 re-classifies the best view of each tracked damage
+### Steady boxes on video
+
+Raw per-frame detections flicker: a damage's score hovers around the threshold so its box blinks,
+its class can switch between frames, and the box wobbles. `src/video.py` therefore:
+
+1. merges overlapping boxes of different classes (the detector's NMS is per class);
+2. links detections into tracks using each track's *predicted* box (linear fit of centre and
+   log size over its last 4 detections), so damage growing as the car approaches keeps one ID;
+   only detections above the threshold start a track, weaker ones (down to half) may extend one;
+3. keeps a track only if it was detected on >= 4 detector runs and its confidence (mean of its 3
+   best scores) reaches the threshold;
+4. since the whole video is processed before it is shown, smooths each track with past *and*
+   future detections (local linear Gaussian-kernel regression over time), interpolates frames
+   between detector runs, and gives each damage one class and one confidence for its life.
+
+Measured with `python scripts/video_stability.py`: RDD2022 has no videos, so it builds simulated
+drives (16 held-out photos, each zoomed 1x→2x towards the horizon with camera shake, 25 fps) with
+exact per-frame ground truth. Settings were chosen on a drive made from validation photos; this is
+the drive made from **test** photos (`results/video_stability.json`, detector every 2nd frame):
+
+| Per minute of video | Raw detections (before) | Steady boxes |
+|---|---|---|
+| Blinks (box disappears and comes back) | 50.0 | **5.2** (−90%) |
+| Track-ID switches on the same damage | 46.9 | **13.5** (−71%) |
+| Box wobble, % of box size per frame | 3.1 | **1.9** (−38%) |
+| Class switches on the same damage | 5.2 | 4.2 |
+| Damages counted (true: 37) | 103 | **72** |
+| False boxes per frame | 1.21 | 1.19 |
+| Per-frame F1 (IoU 0.5, right class) | 0.344 | 0.321 |
+
+Trade-off: per-frame F1 on the test drive drops 2 points (on the dev drive it rose from 0.396 to
+0.409) because a damage now appears only once it is confirmed and short true detections are
+dropped with the blips. *Steady boxes* can be switched off in the app.
+
+The detector-and-tracker output is drawn on every frame and re-encoded as an H.264 mp4 in memory. The fine-tuned VGG16 re-classifies the best view of each tracked damage
 ("VGG16 check" column) as a second opinion. `notebooks/demo.ipynb` walks through the
 saved results and figures.
 
@@ -212,7 +252,8 @@ src/patches.py           image-level split, square crops, balanced sampling -> d
 src/models.py            baseline CNN, VGG16 head, full VGG16 classifier
 src/features.py          cached VGG16 block-4 / block-5 features
 src/detect.py            Faster R-CNN damage detector (train + VOC AP evaluation)
-src/video.py             video frames, IoU tracker, boxes drawn on video
+src/video.py             video tracking + smoothing, boxes drawn on video
+scripts/video_stability.py  simulated-drive benchmark: raw vs steady boxes
 src/train.py             baseline, stage 1 + ablation, stage 2 fine-tuning
 src/evaluate.py          metrics, error analysis, results/summary.md
 src/figures.py           all figures (200 dpi) -> figures/

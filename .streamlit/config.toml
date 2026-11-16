@@ -1,0 +1,35 @@
+# Dark "asphalt" theme for the demo app (streamlit run app/streamlit_app.py from the project root).
+[server]
+enableStaticServing = true
+maxUploadSize = 500
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#FF7A3D"
+backgroundColor = "#0C0E11"
+secondaryBackgroundColor = "#171A20"
+textColor = "#ECEAE5"
+borderColor = "#262A31"
+linkColor = "#FF9A66"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "'Space Grotesk':https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap, Inter, sans-serif"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap, monospace"
+baseFontSize = 15
+baseRadius = "0.75rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+showSidebarBorder = true
+metricValueFontWeight = 600
+headingFontWeights = [700, 650, 600, 600, 600, 600]
+chartCategoricalColors = ["#4FC3F7", "#FFD54F", "#B388FF", "#FF5370"]
+dataframeHeaderBackgroundColor = "#14171C"
+
+[theme.sidebar]
+backgroundColor = "#101216"
+secondaryBackgroundColor = "#1A1D23"
+
+[client]
+toolbarMode = "minimal"

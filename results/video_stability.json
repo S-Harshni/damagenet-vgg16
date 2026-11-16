@@ -1,0 +1,69 @@
+{
+ "setup": "16 clips x 3.6s at 25 fps, 720x720; zoom 1x->2x towards the horizon with camera shake; detector 'Best' preset (flip + 576/704 px); confidence threshold 0.50",
+ "runs": [
+  {
+   "video": "dev",
+   "detect_every": 2,
+   "mode": "raw (before)",
+   "blinks_per_min": 43.8,
+   "label_switches_per_min": 4.2,
+   "id_switches_per_min": 45.8,
+   "jitter_pct": 3.81,
+   "false_boxes_per_frame": 1.04,
+   "precision": 0.3669,
+   "recall": 0.431,
+   "f1": 0.3964,
+   "boxes_per_frame": 2.04,
+   "damages_counted": 98,
+   "true_damages": 46
+  },
+  {
+   "video": "dev",
+   "detect_every": 2,
+   "mode": "stabilised",
+   "blinks_per_min": 14.6,
+   "label_switches_per_min": 4.2,
+   "id_switches_per_min": 25.0,
+   "jitter_pct": 2.47,
+   "false_boxes_per_frame": 0.96,
+   "precision": 0.3886,
+   "recall": 0.431,
+   "f1": 0.4087,
+   "boxes_per_frame": 1.93,
+   "damages_counted": 79,
+   "true_damages": 46
+  },
+  {
+   "video": "test",
+   "detect_every": 2,
+   "mode": "raw (before)",
+   "blinks_per_min": 50.0,
+   "label_switches_per_min": 5.2,
+   "id_switches_per_min": 46.9,
+   "jitter_pct": 3.1,
+   "false_boxes_per_frame": 1.21,
+   "precision": 0.2842,
+   "recall": 0.4344,
+   "f1": 0.3436,
+   "boxes_per_frame": 1.91,
+   "damages_counted": 103,
+   "true_damages": 37
+  },
+  {
+   "video": "test",
+   "detect_every": 2,
+   "mode": "stabilised",
+   "blinks_per_min": 5.2,
+   "label_switches_per_min": 4.2,
+   "id_switches_per_min": 13.5,
+   "jitter_pct": 1.92,
+   "false_boxes_per_frame": 1.19,
+   "precision": 0.2648,
+   "recall": 0.4078,
+   "f1": 0.3211,
+   "boxes_per_frame": 1.93,
+   "damages_counted": 72,
+   "true_damages": 37
+  }
+ ]
+}

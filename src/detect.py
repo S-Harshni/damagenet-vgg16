@@ -179,34 +179,55 @@ def average_precision(gts: list[dict], preds: list[dict], num_classes: int, iou_
 
 
 @torch.no_grad()
-def detect(model, xs: list[torch.Tensor], tta: bool = False, iou: float = 0.5, max_det: int = 100) -> list[dict]:
-    """Run the detector on float images in [0, 1]. With `tta`, also run on the horizontally
-    flipped images, flip those boxes back and merge both sets with per-class NMS."""
+def detect(model, xs: list[torch.Tensor], tta: bool = False, iou: float = 0.5, max_det: int = 100,
+           scales: tuple[int, ...] | None = None) -> list[dict]:
+    """Run the detector on float images in [0, 1].
+
+    `tta`: also run on the horizontally flipped images and flip those boxes back.
+    `scales`: run at each of these input sizes (shorter side, px) instead of the model's own.
+    All outputs are merged with per-class NMS. On the validation set, flip alone adds ~1 mAP
+    point and flip at 576 + 704 px ~3 points (results/detector_v2_val_*.json)."""
     from torchvision.ops import batched_nms
-    out = model(xs)
-    if not tta:
-        return out
-    out_f = model([x.flip(-1) for x in xs])
+    t = model.transform if scales else None
+    old = (t.min_size, t.max_size) if t is not None else None
+    runs = []
+    try:
+        for s in (scales or (None,)):
+            if s is not None:  # keep the trained aspect cap: max_size scales with min_size
+                t.min_size, t.max_size = (int(s),), int(round(s * old[1] / old[0][-1]))
+            runs.append((model(xs), False))
+            if tta:
+                runs.append((model([x.flip(-1) for x in xs]), True))
+    finally:
+        if t is not None:
+            t.min_size, t.max_size = old
+    if len(runs) == 1:
+        return runs[0][0]
     merged = []
-    for x, a, b in zip(xs, out, out_f):
+    for k, x in enumerate(xs):
         W = x.shape[-1]
-        bf = b["boxes"][:, [2, 1, 0, 3]] * torch.tensor([-1, 1, -1, 1], device=x.device) + \
-            torch.tensor([W, 0, W, 0], device=x.device)
-        boxes, scores = torch.cat([a["boxes"], bf]), torch.cat([a["scores"], b["scores"]])
-        labels = torch.cat([a["labels"], b["labels"]])
+        boxes, scores, labels = [], [], []
+        for out, flipped in runs:
+            b = out[k]["boxes"]
+            if flipped:
+                b = b[:, [2, 1, 0, 3]] * torch.tensor([-1, 1, -1, 1], device=b.device) + \
+                    torch.tensor([W, 0, W, 0], device=b.device)
+            boxes.append(b); scores.append(out[k]["scores"]); labels.append(out[k]["labels"])
+        boxes, scores, labels = torch.cat(boxes), torch.cat(scores), torch.cat(labels)
         keep = batched_nms(boxes, scores, labels, iou)[:max_det]
         merged.append({"boxes": boxes[keep], "scores": scores[keep], "labels": labels[keep]})
     return merged
 
 
 @torch.no_grad()
-def predict_dataset(model, ds: DetDataset, device, batch_size: int = 8, tta: bool = False) -> tuple[list[dict], list[dict]]:
+def predict_dataset(model, ds: DetDataset, device, batch_size: int = 8, tta: bool = False,
+                    scales: tuple[int, ...] | None = None) -> tuple[list[dict], list[dict]]:
     model.eval()
     dl = torch.utils.data.DataLoader(ds, batch_size=batch_size, collate_fn=collate, num_workers=4,
                                      persistent_workers=False)
     gts, preds = [], []
     for xs, ts in dl:
-        out = detect(model, [x.to(device).float().div(255) for x in xs], tta)
+        out = detect(model, [x.to(device).float().div(255) for x in xs], tta, scales=scales)
         for t, o in zip(ts, out):
             gts.append({k: v.numpy() for k, v in t.items()})
             preds.append({k: v.cpu().numpy() for k, v in o.items()})
@@ -236,8 +257,9 @@ def f1_at(gts: list[dict], preds: list[dict], num_classes: int, score: float, io
             "f1": round(2 * prec * rec / max(1e-9, prec + rec), 4)}
 
 
-def evaluate(model, ds, device, classes, with_f1: bool = False, tta: bool = False) -> dict:
-    gts, preds = predict_dataset(model, ds, device, tta=tta)
+def evaluate(model, ds, device, classes, with_f1: bool = False, tta: bool = False,
+             scales: tuple[int, ...] | None = None) -> dict:
+    gts, preds = predict_dataset(model, ds, device, tta=tta, scales=scales)
     aps = average_precision(gts, preds, len(classes))
     extra = {}
     if with_f1:
@@ -310,18 +332,21 @@ def train(cfg: dict, paths: Paths, recs: dict[str, list[dict]], debug: bool = Fa
 
 
 def run_eval(cfg: dict, paths: Paths, recs: dict[str, list[dict]], train_info: dict | None = None,
-             name: str = "detector", split: str = "test", tta: bool = False) -> dict:
+             name: str = "detector", split: str = "test", tta: bool = False,
+             scales: tuple[int, ...] | None = None) -> dict:
     """Evaluate checkpoints/<name>.pt. The test result goes to results/<name>.json; other
     splits / TTA go to results/<name>_<split>[_tta].json (used to pick settings on val)."""
     device = get_device(cfg["device"])
     model, ck = load_detector(paths.checkpoints / f"{name}.pt", device, score_thresh=0.01)
     have = [r for r in recs[split] if (paths.raw / r["file"]).exists()]
     res = evaluate(model, DetDataset(have, paths.raw, ck["max_size"], train=False), device, ck["classes"],
-                   with_f1=True, tta=tta)
-    res = {"name": name, "arch": ck["arch"], "split": f"{split} (image-level, seed 42)", "tta": tta, **res,
+                   with_f1=True, tta=tta, scales=scales)
+    res = {"name": name, "arch": ck["arch"], "split": f"{split} (image-level, seed 42)", "tta": tta,
+           "scales": list(scales) if scales else None, **res,
            "min_size": ck["min_size"], "best_epoch": ck.get("best_epoch"),
            **(train_info or {})}
-    suffix = "" if split == "test" and not tta else f"_{split}" + ("_tta" if tta else "")
+    suffix = "" if split == "test" and not tta and not scales else \
+        f"_{split}" + ("_tta" if tta else "") + ("_ms" if scales else "")
     old = paths.results / f"{name}{suffix}.json"
     tr_json = paths.results / f"{name}_train.json"
     if train_info is None and not suffix and tr_json.exists():  # eval-only: attach the saved training history
@@ -339,6 +364,7 @@ def main(argv=None):
     ap.add_argument("--name", default="detector", help="checkpoint/results name (checkpoints/<name>.pt)")
     ap.add_argument("--split", default="test", choices=["val", "test"], help="split to evaluate (eval step)")
     ap.add_argument("--tta", action="store_true", help="evaluate with horizontal-flip test-time augmentation")
+    ap.add_argument("--scales", type=int, nargs="+", help="evaluate at these input sizes, merged (e.g. 576 704)")
     args = ap.parse_args(argv)
     cfg = load_config()
     paths = get_paths(cfg, args.debug).make()
@@ -353,7 +379,7 @@ def main(argv=None):
     if args.only in (None, "train"):
         info = train(cfg, paths, recs, args.debug, args.name)
     if args.only in (None, "eval"):
-        run_eval(cfg, paths, recs, info, args.name, args.split, args.tta)
+        run_eval(cfg, paths, recs, info, args.name, args.split, args.tta, tuple(args.scales or ()) or None)
 
 
 if __name__ == "__main__":
