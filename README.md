@@ -237,7 +237,10 @@ the drive made from **test** photos (`results/video_stability.json`, detector ev
 
 Trade-off: per-frame F1 on the test drive drops 2 points (on the dev drive it rose from 0.396 to
 0.409) because a damage now appears only once it is confirmed and short true detections are
-dropped with the blips. *Steady boxes* can be switched off in the app.
+dropped with the blips. *Steady boxes* can be switched off in the app. Tried and dropped (dev drive): joining a
+track that ends onto one that starts shortly after nearby ("stitching") cut the count only from 79
+to 73 and lowered F1 from 0.409 to 0.371; looser matching (IoU 0.15) or a longer gap (1 s) did not
+beat the defaults either.
 
 The detector-and-tracker output is drawn on every frame and re-encoded as an H.264 mp4 in memory. The fine-tuned VGG16 re-classifies the best view of each tracked damage
 ("VGG16 check" column) as a second opinion. `notebooks/demo.ipynb` walks through the

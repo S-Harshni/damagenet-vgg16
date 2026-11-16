@@ -124,8 +124,9 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .gcap { display:flex; justify-content:space-between; align-items:center; gap:6px; margin:6px 2px 2px; }
 .gcap b { font-size:.82rem; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gcap span { font:500 .78rem 'JetBrains Mono', monospace; color:var(--muted); }
-.tag { display:inline-block; padding:1px 7px; border-radius:6px; font:600 .7rem 'JetBrains Mono', monospace;
-       color:#14161A; }
+.tag { display:inline-block; padding:2px 7px; border-radius:6px; font:700 .74rem 'JetBrains Mono', monospace;
+       color:#14161A !important; line-height:1.3; vertical-align:middle; }
+.gcap b .tag { margin-right:4px; }
 
 /* empty state */
 .empty { border:1.5px dashed #2C3139; border-radius:18px; padding:34px 24px; text-align:center;
