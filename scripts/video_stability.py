@@ -105,10 +105,13 @@ def build_video(split: str, seed: int) -> Path:
 
 
 # ------------------------------------------------------------------ cached detector
-def cached_detections(vid: Path, every: int) -> list:
+PRESET_ARGS = {"quick": (False, None), "balanced": (True, None), "best": (True, (576, 704))}
+
+
+def cached_detections(vid: Path, every: int, preset: str = "best") -> list:
     """Run the app's detector ("Best" preset: flip + 576/704 px, scores >= 0.05) once per video and cache the output,
     so tracker settings can be compared without re-running the network."""
-    f = OUT / f"{vid.stem}_dets_best_e{every}.pkl"
+    f = OUT / f"{vid.stem}_dets_{preset}_e{every}.pkl"
     if f.exists():
         return pickle.load(open(f, "rb"))
     import torch
@@ -123,7 +126,8 @@ def cached_detections(vid: Path, every: int) -> list:
         xs = [torch.from_numpy(np.asarray(im, dtype=np.uint8).copy()).permute(2, 0, 1).float().div(255).to(dev)
               for im in imgs]
         out = []
-        for o in detect(model, xs, tta=True, scales=(576, 704)):
+        tta, scales = PRESET_ARGS[preset]
+        for o in detect(model, xs, tta=tta, scales=scales):
             out.append((o["boxes"].cpu().numpy(), o["labels"].cpu().numpy() - 1, o["scores"].cpu().numpy()))
         res.extend(out)
         return out
@@ -203,10 +207,10 @@ def stability_metrics(per_frame: list[list[dict]], gt_frames: list[list[dict]], 
             "boxes_per_frame": round(n_boxes / len(per_frame), 2)}
 
 
-def run(split: str, every: int, stabilize: bool, thresh: float = 0.5, **kw) -> tuple[dict, dict]:
+def run(split: str, every: int, stabilize: bool, thresh=0.5, preset: str = "best", **kw) -> tuple[dict, dict]:
     vid = OUT / f"{split}_drive.mp4"
     gt = json.load(open(OUT / f"{split}_drive_gt.json"))
-    r = track_video(vid.read_bytes(), replay(cached_detections(vid, every)), ["D00", "D10", "D20", "D40"],
+    r = track_video(vid.read_bytes(), replay(cached_detections(vid, every, preset)), ["D00", "D10", "D20", "D40"],
                     thresh=thresh, detect_every=every, stabilize=stabilize, **kw)
     m = stability_metrics(r["per_frame"], gt["frames"], r["fps"])
     m["damages_counted"] = len(r["damages"])

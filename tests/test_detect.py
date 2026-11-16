@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from src.detect import DetDataset, average_precision, box_iou, voc_ap
-from src.video import IoUTracker, annotate_video, track_label
+from src.video import IoUTracker, annotate_video, track_label, track_video
 
 
 def test_box_iou():
@@ -65,9 +65,9 @@ def _video(n=12, fps=10, w=160, h=120) -> bytes:
 
 
 def _fake_detect(calls):
-    def fn(imgs):
-        calls.append(1)
-        return [(np.array([[40, 30, 120, 90]], float), np.array([3]), np.array([0.9]))]
+    def fn(imgs):  # frames arrive in batches: one result per image
+        calls.append(len(imgs))
+        return [(np.array([[40, 30, 120, 90]], float), np.array([3]), np.array([0.9])) for _ in imgs]
     return fn
 
 
@@ -87,7 +87,7 @@ def test_annotate_video_steady_boxes_span_the_track():
     calls = []
     vid, log, damages = annotate_video(_video(), _fake_detect(calls), ["D00", "D10", "D20", "D40"],
                                        ["a", "b", "c", "pothole"], detect_every=3)
-    assert len(calls) == 4  # frames 0, 3, 6, 9
+    assert calls == [4]  # frames 0, 3, 6, 9 in one batch
     assert len(damages) == 1 and damages[0]["id"] == 1 and damages[0]["label"] == 3
     assert damages[0]["patch"].shape == (128, 128, 3)
     assert sorted({r["frame"] for r in log}) == list(range(10))  # drawn between runs, not after the last
@@ -205,3 +205,16 @@ def test_tta_flips_boxes_back_and_merges():
     x[:, 5:10, 2:8] = 1.0  # object near the left edge
     o = detect(Fake(), [x], tta=True)[0]
     assert o["boxes"].tolist() == [[2.0, 5.0, 8.0, 10.0]]  # flipped copy mapped back, then NMS-merged
+
+
+def test_per_class_threshold_and_preview():
+    pytest.importorskip("av")
+    seen = []
+
+    def det(imgs):  # a pothole at 0.35 and a crack at 0.35
+        return [(np.array([[40, 30, 120, 90], [5, 5, 30, 20]], float), np.array([3, 0]), np.array([0.35, 0.35]))
+                for _ in imgs]
+    r = track_video(_video(), det, ["D00", "D10", "D20", "D40"], thresh=[0.5, 0.5, 0.5, 0.3], detect_every=1,
+                    batch_size=3, preview=seen.append, names=["a", "b", "c", "pothole"])
+    assert [d["label"] for d in r["damages"]] == [3]  # only the pothole passes its lower threshold
+    assert seen and seen[0].size == (160, 120)

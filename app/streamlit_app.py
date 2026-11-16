@@ -45,11 +45,14 @@ MERGE_IOU = 0.7  # overlapping boxes of different classes -> keep the best (cost
 
 # Accuracy presets (chosen on the validation set, see README "Automatic damage detection")
 PRESETS = {
-    "Fast": {"tta": False, "scales": None, "help": "One detector pass per frame."},
-    "Balanced": {"tta": True, "scales": None, "help": "Adds a mirrored pass (2 passes per frame)."},
-    "Best": {"tta": True, "scales": (576, 704), "help": "Adds a mirrored pass and a larger image size (4 passes per frame)."},
+    "Quick": {"tta": False, "scales": None, "every": 3, "help": "One detector pass, every 3rd frame: about real time."},
+    "Balanced": {"tta": True, "scales": None, "every": 2, "help": "Adds a mirrored pass (2 passes per frame)."},
+    "Best": {"tta": True, "scales": (576, 704), "every": 2,
+             "help": "Adds a mirrored pass and a larger image size (4 passes per frame): most accurate."},
 }
-DEFAULT_PRESET = "Best"
+DEFAULT_PRESET = "Quick"
+FALLBACK_THR = {"Quick": 0.40, "Balanced": 0.40, "Best": 0.50}
+SENSITIVITY = {"Catch more": -0.10, "Balanced": 0.0, "Stricter": 0.10}
 
 st.set_page_config(page_title="DamageNet · road damage finder", page_icon="🛣️", layout="wide",
                    initial_sidebar_state="expanded")
@@ -190,6 +193,15 @@ def load_model():
 def load_det():
     from src.detect import load_detector
     return load_detector(DET_CKPT, device(), score_thresh=0.05)
+
+
+@st.cache_data(show_spinner=False)
+def class_thresholds() -> dict:
+    """Per-class score thresholds with the best validation F1 (scripts/class_thresholds.py)."""
+    p = ROOT / "results" / "class_thresholds.json"
+    if not p.exists():
+        return {}
+    return {k.capitalize(): v["per_class_threshold"] for k, v in json.loads(p.read_text()).items()}
 
 
 @st.cache_data(show_spinner=False)
@@ -344,19 +356,24 @@ with st.sidebar:
     st.html(f'<div class="brand"><img src="data:image/svg+xml;base64,{base64.b64encode(LOGO.encode()).decode()}" width="38" height="38"><div><b>DamageNet</b><span>Road damage finder</span></div></div>')
     st.html('<div class="side-h">Detection</div>')
     preset = st.segmented_control("Accuracy", list(PRESETS), default=DEFAULT_PRESET, key="preset",
-                                  help="Best runs the detector on the frame, its mirror image and a larger "
-                                       "copy, then merges the boxes: most accurate on held-out images, ~4x "
-                                       "slower than Fast.") or DEFAULT_PRESET
+                                  help="Quick is about real time. Best runs the detector on the frame, its mirror "
+                                       "image and a larger copy, then merges the boxes: most accurate, ~4x "
+                                       "slower per frame.") or DEFAULT_PRESET
     st.caption(PRESETS[preset]["help"])
-    thresh = st.slider("Minimum confidence", 0.20, 0.90, 0.50 if preset == "Best" else 0.40, 0.05, key=f"thr_{preset}",
-                       help="Show a damage when the detector is at least this sure of it. In videos this is "
-                            "the average of its 3 best frames. Default = the best F1 on the validation set.")
+    sens = st.select_slider("Sensitivity", list(SENSITIVITY), value="Balanced", key="sens",
+                            help="Balanced uses the confidence threshold per damage type that gave the best F1 on "
+                                 "the validation set (potholes get a lower bar than cracks). Catch more lowers "
+                                 "every threshold by 0.10: fewer missed damages, more false alarms.")
+    tuned = class_thresholds().get(preset)
+    thr = [round(min(0.9, max(0.1, (tuned[c] if tuned else FALLBACK_THR[preset]) + SENSITIVITY[sens])), 2)
+           for c in classes]
+    st.caption("Confidence needed · " + " · ".join(f"{nice(n).split()[0]} {t:.2f}" for n, t in zip(names, thr)))
     keep_names = st.pills("Damage types", [nice(n) for n in names], default=[nice(n) for n in names],
                           selection_mode="multi", key="types")
     keep = [j for j, n in enumerate(names) if nice(n) in (keep_names or [])]
     st.html('<div class="side-h">Video</div>')
-    every = st.select_slider("Check every", options=[1, 2, 3, 4], value=2, key="every",
-                             format_func=lambda v: "frame" if v == 1 else f"{v} frames",
+    every = st.select_slider("Check every", options=[1, 2, 3, 4], value=PRESETS[preset]["every"],
+                             key=f"every_{preset}", format_func=lambda v: "frame" if v == 1 else f"{v} frames",
                              help="How often the detector runs. Boxes are drawn on every frame either way "
                                   "(in between they are interpolated). Fewer runs = faster.")
     steady = st.toggle("Steady boxes", value=True, key="steady",
@@ -419,7 +436,7 @@ if mode.endswith("Video"):
         st.stop()
 
     det, dck = load_det()
-    run_key = (hashlib.md5(data).hexdigest(), thresh, tuple(keep), every, steady, preset)
+    run_key = (hashlib.md5(data).hexdigest(), tuple(thr), tuple(keep), every, steady, preset)
     cached = st.session_state.get("vid_key") == run_key
     c1, c2 = st.columns([1, 3], vertical_alignment="center")
     go = c1.button("Find damage", type="primary", icon=":material/search:", width="stretch", disabled=cached)
@@ -428,11 +445,15 @@ if mode.endswith("Video"):
                + (" · settings changed, run again" if st.session_state.get("vid_key") and not cached else ""))
     if go:
         bar = st.progress(0.0, text="Starting…")
+        live = st.empty()
         t0 = time.time()
         vid, log, damages = annotate_video(
-            data, make_detect_fn(det, keep, preset, floor=max(0.05, thresh / 2)), classes, names, thresh=thresh,
+            data, make_detect_fn(det, keep, preset, floor=max(0.05, min(thr) / 2)), classes, names, thresh=thr,
             detect_every=every, stabilize=steady, merge_iou=MERGE_IOU,
-            progress=lambda p, txt: bar.progress(min(1.0, p), text=txt))
+            progress=lambda p, txt: bar.progress(min(1.0, p), text=txt),
+            preview=lambda im: live.image(im, caption="Live preview: raw detections while the video is scanned",
+                                          width=760))
+        live.empty()
         bar.empty()
         st.session_state.update(vid_key=run_key, vid=(vid, log, damages, time.time() - t0), start=0)
         cached = True
@@ -502,7 +523,9 @@ elif mode.endswith("Photo"):
         st.stop()
     det, dck = load_det()
     with st.spinner("Finding damage…"):
-        b, lab, s = make_detect_fn(det, keep, preset, floor=thresh)([img])[0]
+        b, lab, s = make_detect_fn(det, keep, preset, floor=min(thr))([img])[0]
+        ok = s >= np.array(thr)[lab] if len(lab) else np.zeros(0, bool)
+        b, lab, s = b[ok], lab[ok], s[ok]
         b, lab, s, _ = merge_overlaps(b, lab, s, len(classes), MERGE_IOU)
     dets = [{"box": bb.tolist(), "label": int(ll), "score": float(ss), "id": i + 1}
             for i, (bb, ll, ss) in enumerate(zip(b, lab, s))]

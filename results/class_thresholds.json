@@ -1,0 +1,161 @@
+{
+ "quick": {
+  "global_threshold": 0.4,
+  "per_class_threshold": {
+   "D00": 0.3,
+   "D10": 0.35,
+   "D20": 0.45,
+   "D40": 0.3
+  },
+  "test_global": {
+   "D00": {
+    "precision": 0.495,
+    "recall": 0.292,
+    "f1": 0.367
+   },
+   "D10": {
+    "precision": 0.5,
+    "recall": 0.287,
+    "f1": 0.365
+   },
+   "D20": {
+    "precision": 0.58,
+    "recall": 0.527,
+    "f1": 0.552
+   },
+   "D40": {
+    "precision": 0.489,
+    "recall": 0.239,
+    "f1": 0.321
+   }
+  },
+  "test_per_class": {
+   "D00": {
+    "precision": 0.407,
+    "recall": 0.345,
+    "f1": 0.374
+   },
+   "D10": {
+    "precision": 0.456,
+    "recall": 0.312,
+    "f1": 0.37
+   },
+   "D20": {
+    "precision": 0.612,
+    "recall": 0.484,
+    "f1": 0.541
+   },
+   "D40": {
+    "precision": 0.384,
+    "recall": 0.288,
+    "f1": 0.329
+   }
+  }
+ },
+ "balanced": {
+  "global_threshold": 0.4,
+  "per_class_threshold": {
+   "D00": 0.4,
+   "D10": 0.35,
+   "D20": 0.55,
+   "D40": 0.35
+  },
+  "test_global": {
+   "D00": {
+    "precision": 0.46,
+    "recall": 0.326,
+    "f1": 0.382
+   },
+   "D10": {
+    "precision": 0.437,
+    "recall": 0.309,
+    "f1": 0.362
+   },
+   "D20": {
+    "precision": 0.534,
+    "recall": 0.559,
+    "f1": 0.546
+   },
+   "D40": {
+    "precision": 0.436,
+    "recall": 0.271,
+    "f1": 0.334
+   }
+  },
+  "test_per_class": {
+   "D00": {
+    "precision": 0.46,
+    "recall": 0.326,
+    "f1": 0.382
+   },
+   "D10": {
+    "precision": 0.406,
+    "recall": 0.336,
+    "f1": 0.368
+   },
+   "D20": {
+    "precision": 0.646,
+    "recall": 0.481,
+    "f1": 0.552
+   },
+   "D40": {
+    "precision": 0.384,
+    "recall": 0.29,
+    "f1": 0.331
+   }
+  }
+ },
+ "best": {
+  "global_threshold": 0.5,
+  "per_class_threshold": {
+   "D00": 0.5,
+   "D10": 0.4,
+   "D20": 0.6,
+   "D40": 0.5
+  },
+  "test_global": {
+   "D00": {
+    "precision": 0.482,
+    "recall": 0.339,
+    "f1": 0.398
+   },
+   "D10": {
+    "precision": 0.495,
+    "recall": 0.349,
+    "f1": 0.409
+   },
+   "D20": {
+    "precision": 0.528,
+    "recall": 0.56,
+    "f1": 0.544
+   },
+   "D40": {
+    "precision": 0.472,
+    "recall": 0.293,
+    "f1": 0.361
+   }
+  },
+  "test_per_class": {
+   "D00": {
+    "precision": 0.482,
+    "recall": 0.339,
+    "f1": 0.398
+   },
+   "D10": {
+    "precision": 0.396,
+    "recall": 0.409,
+    "f1": 0.402
+   },
+   "D20": {
+    "precision": 0.626,
+    "recall": 0.509,
+    "f1": 0.561
+   },
+   "D40": {
+    "precision": 0.472,
+    "recall": 0.293,
+    "f1": 0.361
+   }
+  }
+ }
+}

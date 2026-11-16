@@ -284,18 +284,21 @@ def smooth_boxes(T: np.ndarray, B: np.ndarray, q: np.ndarray, bandwidth: float) 
     return _from_z(mz + slope * (q[:, None] - mt))
 
 
-def stabilize_tracks(tracks: dict[int, dict], frame_times: np.ndarray, thresh: float, min_hits: int = 3,
+def stabilize_tracks(tracks: dict[int, dict], frame_times: np.ndarray, thresh, min_hits: int = 3,
                      bandwidth: float = 0.15, max_gap: float = 0.6,
                      dedupe: float = 0.5) -> tuple[list[list[dict]], list[dict]]:
     """Turn raw tracks into what is drawn: per frame, a list of smoothed boxes.
 
-    Keeps tracks with >= `min_hits` detections and confidence >= `thresh`; each keeps one label
+    Keeps tracks with >= `min_hits` detections and confidence >= `thresh` (a float, or one value per
+    class: the track's class decides which applies); each keeps one label
     (highest summed class score over its life) and one confidence. Frames inside a gap longer
     than `max_gap` seconds are not drawn. Display IDs are renumbered 1, 2, ... by first sighting.
     Returns (per-frame detections, damages sorted by first sighting).
     """
+    thr = np.broadcast_to(np.asarray(thresh, float), (len(next(iter(tracks.values()))["probs"][0]),)) \
+        if tracks else np.zeros(1)
     kept = [(k, tr) for k, tr in tracks.items()
-            if len(tr["t"]) >= min_hits and track_confidence(tr["score"]) >= thresh]
+            if len(tr["t"]) >= min_hits and track_confidence(tr["score"]) >= thr[int(np.sum(tr["probs"], 0).argmax())]]
     kept.sort(key=lambda kt: kt[1]["t"][0])
     per_frame: list[list[dict]] = [[] for _ in frame_times]
     damages = []
@@ -358,45 +361,47 @@ def _frame_image(fr, max_width: int):
     return img
 
 
-def track_video(data: bytes, detect_fn, classes: list[str], thresh: float = 0.4, detect_every: int = 2,
+def track_video(data: bytes, detect_fn, classes: list[str], thresh=0.4, detect_every: int = 2,
                 stabilize: bool = True, min_hits: int = 4, merge_iou: float = 0.7, iou_thr: float = 0.25,
                 max_gap: float = 0.6, bandwidth: float | None = None, start_ratio: float = 1.0,
-                dedupe: float = 0.5, max_seconds: float = 120.0,
-                max_width: int = 1280, progress=None) -> dict:
+                dedupe: float = 0.5, max_seconds: float = 120.0, max_width: int = 1280,
+                batch_size: int = 4, progress=None, preview=None, names: list[str] | None = None) -> dict:
     """Pass 1: detect on every `detect_every`-th frame, track, and decide what to draw per frame.
 
     `detect_fn(list_of_PIL) -> list of (boxes, 0-based labels, scores)` should return detections
-    down to at least thresh / 2 (weaker ones are ignored). `progress(fraction, text)` is optional.
+    down to at least thresh / 2 (weaker ones are ignored). `thresh` is a float or one value per
+    class. Frames go to the detector `batch_size` at a time (much faster on a GPU).
+    `progress(fraction, text)` and `preview(PIL image with this run's boxes)` are optional.
     Returns {"per_frame": list (one per frame) of drawn boxes, "damages": list sorted by first
     sighting (id, label, conf, best, first, last, hits, best_t, patch), "fps", "size", "n_frames"}.
     """
     from .patches import cut_patch
 
-    low = max(0.05, thresh / 2) if stabilize else thresh
-    start = thresh * start_ratio
+    thr = np.broadcast_to(np.asarray(thresh, float), (len(classes),)).copy()
+    low = np.maximum(0.05, thr / 2) if stabilize else thr
+    start = thr * start_ratio
     stable = StableTracker(iou_thr=iou_thr, max_gap=max_gap)
     raw = IoUTracker(max_age=max(2, 6 // detect_every))
     raw_steps: dict[int, list[dict]] = {}
     src, vs, fps, n_max, n_total = _open_frames(data, max_seconds)
     n_frames, size = 0, None
-    with src:
-        for n, fr in enumerate(src.decode(vs)):
-            if n >= n_max:
-                break
-            n_frames = n + 1
-            if n % detect_every:
-                continue
-            img = _frame_image(fr, max_width)
-            size = img.size
+    pending: list[tuple[int, object]] = []
+    n_batches = 0
+
+    def flush():
+        nonlocal n_batches
+        if not pending:
+            return
+        outs = detect_fn([im for _, im in pending])
+        for (n, img), (boxes, labels, scores) in zip(pending, outs):
             t = n / fps
-            boxes, labels, scores = detect_fn([img])[0]
             boxes, labels, scores = (np.asarray(boxes, float).reshape(-1, 4), np.asarray(labels, int),
                                      np.asarray(scores, float))
-            k = scores >= low
+            k = scores >= low[labels] if len(labels) else np.zeros(0, bool)
             boxes, labels, scores = boxes[k], labels[k], scores[k]
             if stabilize:
                 boxes, labels, scores, probs = merge_overlaps(boxes, labels, scores, len(classes), merge_iou)
-                ids = stable.update(boxes, labels, scores, probs, t, can_start=scores >= start)
+                ids = stable.update(boxes, labels, scores, probs, t, can_start=scores >= start[labels])
                 tracks = stable.tracks
                 boxes = [b for b, i in zip(boxes, ids) if i != -1]
                 ids = [i for i in ids if i != -1]
@@ -408,15 +413,39 @@ def track_video(data: bytes, detect_fn, classes: list[str], thresh: float = 0.4,
             for i, b in zip(ids, boxes):  # keep a clean patch of each track's best view
                 if tracks[i].get("best_t") == t:
                     tracks[i]["patch"] = cut_patch(img, b, 128, 1.15)
-            if progress and (n // detect_every) % 3 == 0:
-                progress(0.85 * min(1.0, (n + 1) / max(1, n_total)), f"Scanning frame {n + 1} of ~{n_total}")
+        n_batches += 1
+        n_last, img_last = pending[-1]
+        if progress:
+            progress(0.85 * min(1.0, (n_last + 1) / max(1, n_total)), f"Scanning frame {n_last + 1} of ~{n_total}")
+        if preview and names and n_batches % 3 == 1:  # quick look at what is being found
+            b, lab, sc = outs[-1]
+            lab = np.asarray(lab, int)
+            keep = np.asarray(sc) >= thr[lab] if len(lab) else []
+            dets = [{"box": list(bb), "label": int(ll), "score": float(ss)}
+                    for bb, ll, ss, kk in zip(b, lab, sc, keep) if kk]
+            preview(draw_detections(img_last.copy(), dets, classes, names))
+        pending.clear()
+
+    with src:
+        for n, fr in enumerate(src.decode(vs)):
+            if n >= n_max:
+                break
+            n_frames = n + 1
+            if n % detect_every:
+                continue
+            img = _frame_image(fr, max_width)
+            size = img.size
+            pending.append((n, img))
+            if len(pending) >= batch_size:
+                flush()
+        flush()
     if size is None:
         raise ValueError("no video frames could be decoded")
 
     frame_times = np.arange(n_frames) / fps
     if stabilize:
         bw = bandwidth if bandwidth is not None else max(0.15, 1.5 * detect_every / fps)
-        per_frame, damages = stabilize_tracks(stable.tracks, frame_times, thresh, min_hits, bw, max_gap, dedupe)
+        per_frame, damages = stabilize_tracks(stable.tracks, frame_times, thr, min_hits, bw, max_gap, dedupe)
     else:  # earlier behaviour: hold each run's raw detections until the next run
         per_frame, cur = [], []
         for n in range(n_frames):
@@ -441,7 +470,7 @@ def render_video(data: bytes, per_frame: list[list[dict]], classes: list[str], n
         os_ = dst.add_stream("libx264", rate=round(fps))
         os_.width, os_.height = size[0] // 2 * 2, size[1] // 2 * 2
         os_.pix_fmt = "yuv420p"
-        os_.options = {"crf": "21", "preset": "veryfast"}
+        os_.options = {"crf": "22", "preset": "superfast"}
         for n, fr in enumerate(src.decode(vs)):
             if n >= n_frames:
                 break
@@ -465,7 +494,7 @@ def annotate_video(data: bytes, detect_fn, classes: list[str], names: list[str],
     Returns (H.264 mp4 bytes, one log row per drawn box per frame, damages sorted by first sighting).
     """
     r = track_video(data, detect_fn, classes, thresh, detect_every, stabilize, max_seconds=max_seconds,
-                    max_width=max_width, progress=progress, **track_kw)
+                    max_width=max_width, progress=progress, names=names, **track_kw)
     fps = r["fps"]
     log = [{"time_s": round(n / fps, 3), "frame": n, "id": d["id"], "class": classes[d["label"]],
             "score": round(d["score"], 3), "box": [round(v, 1) for v in d["box"]]}

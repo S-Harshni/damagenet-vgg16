@@ -147,11 +147,13 @@ Input modes:
   damage*. The app returns the video with a steady box, class and confidence drawn on every
   frame (downloadable as mp4), a count per damage type, a timeline of when each damage is on
   screen, and a gallery of each damage's best view (click its time to jump there) plus a table
-  with a VGG16 re-check. Counts are approximate: a damage the detector loses for a while can get
-  a second ID. Sidebar settings: accuracy preset (*Fast* / *Balanced* / *Best*, default Best),
-  minimum confidence (default 0.50 for Best, 0.40 otherwise), damage types, how often the detector
-  runs (boxes are drawn on every frame either way) and *Steady boxes* (on; off shows the raw
-  detector output). About 3 min for a 1-minute 720p clip with *Best* on Apple MPS.
+  with a VGG16 re-check. While it scans, a live preview shows the frames being checked. Counts are
+  approximate: a damage the detector loses for a while can get a second ID. Sidebar settings:
+  accuracy preset (*Quick*, default: one pass on every 3rd frame, about real time / *Balanced* /
+  *Best*: 4 passes per frame, most accurate), *Sensitivity* (*Balanced* uses a confidence threshold
+  per damage type chosen on the validation set, potholes get a lower bar; *Catch more* lowers all
+  by 0.10), damage types, how often the detector runs (boxes are drawn on every frame either way)
+  and *Steady boxes*. Frames go to the detector in batches of 4.
   The theme is in `.streamlit/config.toml` (dark, Inter / Space Grotesk fonts).
 - **Photo**: the same automatic boxes on a photo, plus an option to drag your own box
   and classify it with VGG16.
@@ -204,6 +206,26 @@ How the final model was chosen (no tuning on the test set):
 ![Detector comparison](figures/detector_comparison.png)
 ![Detector training](figures/detector_training.png)
 ![Detector examples](figures/detector_examples.png)
+
+### Speed and per-class thresholds
+
+- *Quick* (app default): one detector pass on every 3rd frame, frames batched 4 at a time,
+  faster encoder preset. The 58 s, 720×720 test drive takes **33 s** on Apple MPS (it took ~3 min
+  with *Best*, one frame at a time). Steadiness of *Quick* on the simulated drives was not re-measured.
+- Per-class confidence thresholds (`python scripts/class_thresholds.py`, chosen on validation,
+  `results/class_thresholds.json`). Pothole results on the held-out **test** images
+  (IoU 0.5; recall = share of labelled potholes found):
+
+| Preset | One threshold for all classes | Per-class threshold |
+|---|---|---|
+| Quick | P 0.49 / **R 0.24** / F1 0.32 (at 0.40) | P 0.38 / **R 0.29** / F1 0.33 (at 0.30) |
+| Balanced | P 0.44 / R 0.27 / F1 0.33 (at 0.40) | P 0.38 / R 0.29 / F1 0.33 (at 0.35) |
+| Best | P 0.47 / R 0.29 / F1 0.36 (at 0.50) | unchanged (0.50 was already best) |
+
+  Lower thresholds find somewhat more potholes but cannot fix the rest: at IoU 0.5 most "missed"
+  potholes are either labelled very differently (one box over a whole broken stretch) or not
+  found by this small detector at all. A stronger detector trained on all RDD2022 images is the
+  next step for pothole recall.
 
 ### Steady boxes on video
 
